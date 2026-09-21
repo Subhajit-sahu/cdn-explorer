@@ -23,9 +23,10 @@ app.use("/api/time", timeRouter);
 app.use("/api/cdn-test", cdnTestRouter);
 
 const PORT = process.env.PORT || 5000;
+const HOST = "0.0.0.0";
 
-const server = app.listen(PORT, () => {
-  console.log(`CDN Lab API running on http://localhost:${PORT}`);
+const server = app.listen(PORT, HOST, () => {
+  console.log(`CDN Lab API running on http://${HOST}:${PORT}`);
 });
 
 module.exports = { app, server };
