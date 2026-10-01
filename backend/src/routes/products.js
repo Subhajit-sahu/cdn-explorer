@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 router.get("/", (req, res) => {
+  res.set("Cache-Control", "public, max-age=60");
   res.json({
     source: "origin",
     cacheable: true,

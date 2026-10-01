@@ -10,6 +10,7 @@ router.get("/", async (req, res) => {
 
   const responseTime = Date.now() - start;
 
+  res.set("Cache-Control", "public, max-age=30");
   res.json({
     source: "origin",
     message: "This response intentionally takes time.",

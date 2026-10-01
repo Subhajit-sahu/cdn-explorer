@@ -12,6 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
+  res.set("Cache-Control", "no-store");
   res.json({
     message: "CDN Lab API is running 🚀",
     server: "Node.js + Express",
