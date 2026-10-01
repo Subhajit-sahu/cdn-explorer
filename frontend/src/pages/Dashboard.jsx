@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import QuickStartGuide from '../components/cdn/QuickStartGuide';
 import ArchitectureFlow from '../components/architecture/ArchitectureFlow';
 import ApiTestCard from '../components/api/ApiTestCard';
 import RequestInspector from '../components/api/RequestInspector';
@@ -23,11 +24,16 @@ export default function Dashboard() {
     time: null,
     cdnTest: null,
   });
+  const [comparisonData, setComparisonData] = useState({
+    origin: null,
+    cdn: null,
+  });
+  const [comparing, setComparing] = useState(false);
 
-  const executeApiCall = async (key, callFn, meta) => {
+  const executeApiCall = async (key, callFn, meta, baseUrl = null) => {
     setLoading((prev) => ({ ...prev, [key]: true }));
 
-    const res = await callFn();
+    const res = await callFn(baseUrl);
 
     const requestLog = {
       ...res,
@@ -39,38 +45,111 @@ export default function Dashboard() {
     setLastRequest(requestLog);
     setMetrics((prev) => ({
       ...prev,
-      [key]: { duration: res.duration },
+      [key]: {
+        duration: res.duration,
+        headers: res.headers,
+      },
     }));
     setHistory((prev) => [requestLog, ...prev]);
 
     setLoading((prev) => ({ ...prev, [key]: false }));
+    return requestLog;
   };
+
+  const handleRunComparison = async () => {
+    setComparing(true);
+
+    try {
+      // 1. Direct EC2 Origin Request
+      const originLog = await executeApiCall(
+        'cdnTest',
+        apiService.getCdnTest,
+        {
+          endpoint: '/api/cdn-test',
+          type: 'CACHE TEST',
+          typeClass: 'cache-test',
+        },
+        apiService.DIRECT_ORIGIN_URL
+      );
+
+      // 2. CloudFront CDN Request
+      const cdnLog = await executeApiCall(
+        'cdnTest',
+        apiService.getCdnTest,
+        {
+          endpoint: '/api/cdn-test',
+          type: 'CACHE TEST',
+          typeClass: 'cache-test',
+        },
+        apiService.CLOUDFRONT_URL
+      );
+
+      setComparisonData({
+        origin: originLog,
+        cdn: cdnLog,
+      });
+      setLastRequest(cdnLog);
+    } finally {
+      setComparing(false);
+    }
+  };
+
+  const handleQuickMiss = () => {
+    executeApiCall('cdnTest', apiService.getCdnTest, {
+      endpoint: '/api/cdn-test',
+      type: 'CACHE TEST (30s)',
+      typeClass: 'cache-test',
+    });
+  };
+
+  const handleQuickHit = () => {
+    executeApiCall('cdnTest', apiService.getCdnTest, {
+      endpoint: '/api/cdn-test',
+      type: 'CACHE TEST (30s)',
+      typeClass: 'cache-test',
+    });
+  };
+
+  const latestPop = lastRequest?.headers?.xAmzCfPop || null;
 
   return (
     <div>
-      {/* 1. System Architecture Card */}
-      <ArchitectureFlow />
+      {/* 1. Interactive Quick Start Guide */}
+      <QuickStartGuide
+        onRunMiss={handleQuickMiss}
+        onRunHit={handleQuickHit}
+        onRunBenchmark={handleRunComparison}
+        loading={loading.cdnTest}
+        benchmarking={comparing}
+        lastResult={lastRequest}
+      />
 
-      {/* 2. API Testing Section */}
+      {/* 2. System Architecture Flow Diagram */}
+      <ArchitectureFlow latestPop={latestPop} />
+
+      {/* 3. API Testing Suite */}
       <section style={{ marginBottom: '2rem' }} aria-label="API Testing Endpoints">
-        <div className="card-title api-section-header">
-          <span>API Testing Suite</span>
+        <div className="api-section-header">
+          <span className="section-title">API Testing Suite (via AWS CloudFront)</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            Target: d302cmp2c7foh.cloudfront.net
+          </span>
         </div>
 
         <div className="api-cards-grid">
           <ApiTestCard
             title="Products API"
             endpoint="GET /api/products"
-            type="CACHEABLE"
+            type="CACHEABLE (60s)"
             typeClass="cacheable"
-            source="ORIGIN"
-            description="Returns catalog items marked cacheable. Origin data will be cached at edge once CloudFront is linked."
+            description="Returns catalog data marked cacheable for 60s. Request 1 triggers MISS from CloudFront; subsequent calls respond with HIT and an increasing Age."
             latestDuration={metrics.products?.duration}
+            latestXCache={metrics.products?.headers?.xCache}
             loading={loading.products}
             onSend={() =>
               executeApiCall('products', apiService.getProducts, {
                 endpoint: '/api/products',
-                type: 'CACHEABLE',
+                type: 'CACHEABLE (60s)',
                 typeClass: 'cacheable',
               })
             }
@@ -79,16 +158,16 @@ export default function Dashboard() {
           <ApiTestCard
             title="Time API"
             endpoint="GET /api/time"
-            type="DYNAMIC / NON-CACHEABLE"
+            type="DYNAMIC (no-store)"
             typeClass="dynamic"
-            source="ORIGIN"
-            description="Returns live ISO server timestamp. Proves dynamic data changes with each subsequent request."
+            description="Origin responds with Cache-Control: no-store. CloudFront never caches this endpoint, always forwarding to origin (consistently MISS)."
             latestDuration={metrics.time?.duration}
+            latestXCache={metrics.time?.headers?.xCache}
             loading={loading.time}
             onSend={() =>
               executeApiCall('time', apiService.getCurrentTime, {
                 endpoint: '/api/time',
-                type: 'DYNAMIC / NON-CACHEABLE',
+                type: 'DYNAMIC (no-store)',
                 typeClass: 'dynamic',
               })
             }
@@ -97,16 +176,16 @@ export default function Dashboard() {
           <ApiTestCard
             title="CDN Test API"
             endpoint="GET /api/cdn-test"
-            type="CACHE TEST"
+            type="CACHE TEST (30s)"
             typeClass="cache-test"
-            source="ORIGIN"
-            description="Simulates ~1000ms origin delay. In Phase 2: First call = CACHE MISS (slow), Subsequent calls = CACHE HIT (fast)."
+            description="Origin simulates 1000ms delay with max-age=30. Click once to observe ~1000ms (MISS); click again to observe ~100-200ms (HIT) directly from edge."
             latestDuration={metrics.cdnTest?.duration}
+            latestXCache={metrics.cdnTest?.headers?.xCache}
             loading={loading.cdnTest}
             onSend={() =>
               executeApiCall('cdnTest', apiService.getCdnTest, {
                 endpoint: '/api/cdn-test',
-                type: 'CACHE TEST',
+                type: 'CACHE TEST (30s)',
                 typeClass: 'cache-test',
               })
             }
@@ -114,7 +193,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* 3. Main 2-Column Split: Inspector & Response Viewer (Left), CDN & Perf (Right) */}
+      {/* 4. Main 2-Column Split: Inspector & Response Viewer (Left), CDN & Perf (Right) */}
       <div className="dashboard-split">
         <div className="split-col">
           <RequestInspector lastRequest={lastRequest} />
@@ -125,19 +204,24 @@ export default function Dashboard() {
         </div>
 
         <div className="split-col">
-          <CdnStatus />
-          <PerformancePanel metrics={metrics} />
+          <CdnStatus latestCdnData={lastRequest?.target === 'CDN' ? lastRequest : null} />
+          <PerformancePanel
+            cdnTestMetrics={metrics.cdnTest}
+            comparisonData={comparisonData}
+            onRunComparison={handleRunComparison}
+            comparing={comparing}
+          />
           <GeoExperiment />
         </div>
       </div>
 
-      {/* 4. Request History Log */}
+      {/* 5. Request History Telemetry Log */}
       <RequestHistory
         history={history}
         onClearHistory={() => setHistory([])}
       />
 
-      {/* 5. Educational Learning Panel */}
+      {/* 6. Educational Learning Panel */}
       <LearningPanel />
     </div>
   );

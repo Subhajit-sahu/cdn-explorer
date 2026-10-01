@@ -1,14 +1,16 @@
-import { API_BASE_URL } from '../config/env';
+import { API_BASE_URL, CLOUDFRONT_URL, DIRECT_ORIGIN_URL } from '../config/env';
 
 /**
- * Executes a client-measured HTTP fetch request to the backend.
- * Measures real client duration using high-resolution performance.now().
+ * Executes a client-measured HTTP fetch request.
+ * Captures real CloudFront and origin response headers exposed by the browser.
  */
 async function executeRequest(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const base = options.baseUrl || API_BASE_URL;
+  const url = `${base}${endpoint}`;
   const method = options.method || 'GET';
   const startTime = performance.now();
   const requestTimestamp = new Date();
+  const isCdn = url.includes('cloudfront.net');
 
   try {
     const response = await fetch(url, {
@@ -31,8 +33,32 @@ async function executeRequest(endpoint, options = {}) {
       data = rawText;
     }
 
-    // Estimate response payload byte size
     const size = rawText ? new Blob([rawText]).size : 0;
+
+    // Extract headers where exposed by the browser
+    const rawCacheControl = response.headers.get('cache-control');
+    const rawEtag = response.headers.get('etag');
+    const rawXCache = response.headers.get('x-cache');
+    const rawAge = response.headers.get('age');
+    const rawVia = response.headers.get('via');
+    const rawXAmzCfPop = response.headers.get('x-amz-cf-pop');
+    const rawXAmzCfId = response.headers.get('x-amz-cf-id');
+
+    // Interpret X-Cache strictly without fabrication:
+    // "Hit from cloudfront" -> HIT
+    // "Miss from cloudfront" -> MISS
+    // Unavailable -> Unknown
+    let xCache = 'Unknown';
+    if (rawXCache) {
+      const lower = rawXCache.toLowerCase();
+      if (lower.includes('hit')) {
+        xCache = 'HIT';
+      } else if (lower.includes('miss')) {
+        xCache = 'MISS';
+      } else {
+        xCache = rawXCache;
+      }
+    }
 
     return {
       ok: response.ok,
@@ -44,6 +70,20 @@ async function executeRequest(endpoint, options = {}) {
       size,
       url,
       method,
+      endpoint,
+      target: isCdn ? 'CDN' : 'DIRECT ORIGIN',
+      targetUrl: base,
+      // CDN and HTTP Header Telemetry
+      headers: {
+        cacheControl: rawCacheControl || null,
+        etag: rawEtag || null,
+        xCache,
+        rawXCache: rawXCache || null,
+        age: rawAge != null ? rawAge : null,
+        via: rawVia || null,
+        xAmzCfPop: rawXAmzCfPop || null,
+        xAmzCfId: rawXAmzCfId || null,
+      },
       error: response.ok ? null : `HTTP Error ${response.status}: ${response.statusText}`,
     };
   } catch (err) {
@@ -60,14 +100,29 @@ async function executeRequest(endpoint, options = {}) {
       size: 0,
       url,
       method,
-      error: err.message || 'Failed to connect to backend server. Make sure the backend is running on port 5000.',
+      endpoint,
+      target: isCdn ? 'CDN' : 'DIRECT ORIGIN',
+      targetUrl: base,
+      headers: {
+        cacheControl: null,
+        etag: null,
+        xCache: 'Unknown',
+        rawXCache: null,
+        age: null,
+        via: null,
+        xAmzCfPop: null,
+        xAmzCfId: null,
+      },
+      error: err.message || 'Failed to connect. Check network and CORS configuration.',
     };
   }
 }
 
 export const apiService = {
-  getRoot: () => executeRequest('/'),
-  getProducts: () => executeRequest('/api/products'),
-  getCurrentTime: () => executeRequest('/api/time'),
-  getCdnTest: () => executeRequest('/api/cdn-test'),
+  getRoot: (baseUrl) => executeRequest('/', { baseUrl }),
+  getProducts: (baseUrl) => executeRequest('/api/products', { baseUrl }),
+  getCurrentTime: (baseUrl) => executeRequest('/api/time', { baseUrl }),
+  getCdnTest: (baseUrl) => executeRequest('/api/cdn-test', { baseUrl }),
+  CLOUDFRONT_URL,
+  DIRECT_ORIGIN_URL,
 };

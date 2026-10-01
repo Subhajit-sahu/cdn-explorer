@@ -1,50 +1,72 @@
 import React from 'react';
 import { ENV_INFO } from '../../config/env';
 
-export default function CdnStatus() {
+export default function CdnStatus({ latestCdnData }) {
+  const pop = latestCdnData?.headers?.xAmzCfPop;
+  const cacheStatus = latestCdnData?.headers?.xCache;
+  const age = latestCdnData?.headers?.age;
+
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title">
-          <span>CDN Status</span>
+          <span>Infrastructure Status</span>
         </div>
-        <div className="cdn-status-pill">
-          <span className="dot" />
-          <span>Not Connected</span>
+        <div className="cdn-status-pill connected">
+          <span className="pulse-dot" style={{ width: 6, height: 6 }} />
+          <span>CDN Connected</span>
         </div>
       </div>
 
       <div className="cdn-fields">
         <div className="cdn-field-row">
           <span className="cdn-field-k">CDN Provider</span>
-          <span className="cdn-field-v" style={{ color: 'var(--text-primary)' }}>AWS CloudFront</span>
+          <span className="cdn-field-v">AWS CloudFront</span>
         </div>
 
         <div className="cdn-field-row">
-          <span className="cdn-field-k">Distribution</span>
-          <span className="cdn-field-v">Not configured</span>
+          <span className="cdn-field-k">Distribution Domain</span>
+          <span className="cdn-field-v" style={{ color: 'var(--accent-cyan)' }}>
+            {ENV_INFO.distributionDomain}
+          </span>
         </div>
 
         <div className="cdn-field-row">
-          <span className="cdn-field-k">Edge Location</span>
-          <span className="cdn-field-v">Not available</span>
+          <span className="cdn-field-k">Edge POP (Observed)</span>
+          <span className="cdn-field-v">
+            {pop ? (
+              <span style={{ color: 'var(--accent-cyan)' }}>{pop}</span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>Send request to observe</span>
+            )}
+          </span>
         </div>
 
         <div className="cdn-field-row">
-          <span className="cdn-field-k">Cache Status</span>
-          <span className="cdn-field-v">Not available</span>
+          <span className="cdn-field-k">Latest Edge Cache</span>
+          <span className="cdn-field-v">
+            {cacheStatus ? (
+              <span className={`badge-xcache ${cacheStatus === 'HIT' ? 'cache-hit' : cacheStatus === 'MISS' ? 'cache-miss' : 'cache-unknown'}`}>
+                {cacheStatus}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>—</span>
+            )}
+          </span>
         </div>
 
         <div className="cdn-field-row">
-          <span className="cdn-field-k">Active Origin</span>
-          <span className="cdn-field-v" style={{ color: 'var(--accent-origin)' }}>{ENV_INFO.host}</span>
+          <span className="cdn-field-k">Cache Age</span>
+          <span className="cdn-field-v">
+            {age != null ? `${age} s` : <span style={{ color: 'var(--text-muted)' }}>Not available</span>}
+          </span>
         </div>
-      </div>
 
-      <div className="cdn-info-box">
-        <span style={{ fontSize: '1rem' }}>☁️</span>
-        <div>
-          <strong>Phase 1 Notice:</strong> CloudFront will be connected in the next phase. All requests currently hit the local Node.js origin directly.
+        <div className="cdn-field-row">
+          <span className="cdn-field-k">Origin EC2 Server</span>
+          <span className="cdn-field-v" style={{ color: 'var(--accent-amber)' }}>
+            {ENV_INFO.originHost} (Mumbai)
+          </span>
         </div>
       </div>
     </div>

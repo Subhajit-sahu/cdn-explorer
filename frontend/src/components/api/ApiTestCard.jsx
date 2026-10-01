@@ -7,14 +7,21 @@ export default function ApiTestCard({
   method = 'GET',
   type,
   typeClass = 'cacheable',
-  source = 'ORIGIN',
   description,
   latestDuration,
+  latestXCache,
   loading = false,
   onSend,
 }) {
+  const getXCacheBadge = (val) => {
+    if (!val) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+    if (val === 'HIT') return <span className="badge-xcache cache-hit">HIT</span>;
+    if (val === 'MISS') return <span className="badge-xcache cache-miss">MISS</span>;
+    return <span className="badge-xcache cache-unknown">{val}</span>;
+  };
+
   return (
-    <div className="card api-card">
+    <div className="api-card">
       <div className="api-card-top">
         <div className="endpoint-badge-row">
           <span className="method-tag">{method}</span>
@@ -24,15 +31,18 @@ export default function ApiTestCard({
         <div className="endpoint-path">{endpoint}</div>
         <p className="endpoint-desc">{description}</p>
 
-        <div className="meta-grid">
-          <div className="meta-item">
-            <span className="meta-k">Source</span>
-            <span className="meta-v origin">{source}</span>
+        <div className="card-metrics-grid">
+          <div className="metric-cell">
+            <span className="metric-cell-label">Client Latency</span>
+            <span className="metric-cell-val" style={{ color: latestDuration != null ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>
+              {latestDuration != null ? formatDuration(latestDuration) : 'No requests yet'}
+            </span>
           </div>
-          <div className="meta-item">
-            <span className="meta-k">Latest Latency</span>
-            <span className="meta-v">
-              {latestDuration != null ? formatDuration(latestDuration) : '—'}
+
+          <div className="metric-cell">
+            <span className="metric-cell-label">Edge Cache</span>
+            <span className="metric-cell-val">
+              {getXCacheBadge(latestXCache)}
             </span>
           </div>
         </div>
@@ -47,7 +57,7 @@ export default function ApiTestCard({
         {loading ? (
           <>
             <span className="spinner" />
-            <span>Sending...</span>
+            <span>Fetching via Edge...</span>
           </>
         ) : (
           <>

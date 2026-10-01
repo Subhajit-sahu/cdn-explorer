@@ -1,14 +1,18 @@
 /**
  * Centralized API Environment Configuration
- * Do not hardcode API URLs in individual components.
+ * Connects frontend to the real AWS CloudFront distribution
+ * and provides Direct EC2 Origin reference for comparison.
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+export const CLOUDFRONT_URL = 'https://d302cmp2c7foh.cloudfront.net';
+export const DIRECT_ORIGIN_URL = 'http://52.66.74.208:5000';
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || CLOUDFRONT_URL;
 
 export const isCloudFront = API_BASE_URL.includes('cloudfront.net');
 
 export const ENV_INFO = {
-  name: isCloudFront ? 'CLOUDFRONT' : 'LOCAL',
+  name: isCloudFront ? 'CLOUDFRONT' : 'DIRECT ORIGIN',
   baseUrl: API_BASE_URL,
   host: (() => {
     try {
@@ -18,4 +22,6 @@ export const ENV_INFO = {
       return API_BASE_URL.replace(/^https?:\/\//, '');
     }
   })(),
+  originHost: '52.66.74.208:5000',
+  distributionDomain: 'd302cmp2c7foh.cloudfront.net',
 };
